@@ -1,5 +1,7 @@
 import subprocess
+import os
 import time
+import yaml
 
 def xrandr():
     '''
@@ -9,29 +11,40 @@ def xrandr():
 
 def get_monitors():
     '''
-    Return a sorted list of currently connected monitors. For laptop lids, inclusion in the list is
+    Return a set of currently connected monitors. For laptop lids, inclusion in the set is
     determined by the state of the laptop lid.
     '''
     lines = xrandr()
-    conn = list(filter(lambda line: " connected " in line, lines))
-    mons = [ mon.split()[0] for mon in conn ]
-    lid_state = open('/proc/acpi/button/lid/LID/state', 'r').readlines()[0].split()[1]
-    if lid_state == 'closed':
-        mons.remove('eDP-1')
-    return sorted(mons)
+    conn = set(filter(lambda line: " connected " in line, lines))
+    mons = { mon.split()[0] for mon in conn }
+    if 'lid' in config and 'laptop-screen' in config:
+        lid_state = open(config['lid'], 'r').readlines()[0].split()[1]
+        if lid_state == 'closed':
+            mons.remove(config['laptop-screen'])
+    return mons
 
 def get_all_monitors():
     '''
-    Return a list of all monitors reported by xrandr, regardless of whether they're connected
+    Return a set of all monitors reported by xrandr, regardless of whether they're connected
     '''
-    return [ mon.split()[0] for mon in list(filter(lambda line: not line.startswith(' '), xrandr())) ]
+    return { mon.split()[0] for mon in list(filter(lambda line: not line.startswith(' '), xrandr())) }
 
 def main():
     '''
     Repeatedly polls for a list of connected monitors, using xrandr to set connected monitors to
     auto and disconnected monitors to off
     '''
-    old_monitors = []
+    global config
+
+    # Load configuration from ~/.automon.yaml, if present
+    try:
+        with open(os.path.expanduser('~/.automon.yaml')) as f:
+            config = yaml.load(f, Loader=yaml.Loader)
+        if 'profiles' not in config:
+            config['profiles'] = []
+    except:
+        config = {'profiles': []}
+    old_monitors = set()
     while True:
         time.sleep(1)
         monitors = get_monitors()
@@ -47,11 +60,31 @@ def main():
                 # Turn off disconnected monitors
                 args.extend(['--output', disconnected, '--off'])
             if len(monitors) > 0:
-                # Set the first monitor as primary
-                args.extend(['--output', monitors[0], '--auto', '--primary'])
-                for monitor in monitors[1:]:
-                    # Auto-config all the monitors
-                    args.extend(['--output', monitor, '--auto'])
+                profiles = [p for p in config['profiles'] if monitors == set(map(lambda m: m['output'], p))]
+
+                if len(profiles) > 0:
+                    # Select the first profile that matched
+                    profile = profiles[0]
+                    has_primary = False
+                    for monitor_config in profile:
+                        for prop in monitor_config:
+                            if prop == 'mode' and monitor_config[prop] == 'auto':
+                                args.append('--auto')
+                            else:
+                                args.extend(['--' + prop, monitor_config[prop]])
+                        if not has_primary:
+                            args.append('--primary')
+                            has_primary = True
+                else:
+                    # Default configuration
+                    # Set the first monitor as primary
+                    has_primary = False
+                    for monitor in monitors:
+                        # Auto-config all the monitors
+                        args.extend(['--output', monitor, '--auto'])
+                        if not has_primary:
+                            args.append('--primary')
+                            has_primary = True
             command = ' '.join(args)
             subprocess.run(args)
             old_monitors = monitors
