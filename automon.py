@@ -71,7 +71,9 @@ def main():
                             if prop == 'mode' and monitor_config[prop] == 'auto':
                                 args.append('--auto')
                             else:
-                                args.extend(['--' + prop, monitor_config[prop]])
+                                args.append('--' + prop)
+                                if monitor_config[prop] is not None:
+                                    args.append(monitor_config[prop])
                         if not has_primary:
                             args.append('--primary')
                             has_primary = True
