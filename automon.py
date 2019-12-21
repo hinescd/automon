@@ -44,52 +44,68 @@ def main():
             config['profiles'] = []
     except:
         config = {'profiles': []}
+
+    if not os.path.exists('/tmp/automon_pipe'):
+        os.mkfifo('/tmp/automon_pipe')
+    pipe_fd = os.open('/tmp/automon_pipe', os.O_RDONLY | os.O_NONBLOCK)
+
     old_monitors = set()
-    while True:
-        time.sleep(1)
-        monitors = get_monitors()
-        if monitors != old_monitors:
-            # At least one monitor was either connected or disconnected
+    profile_index = 0
 
-            # Get the monitors that have been disconnected, if any
-            disconnecteds = list(filter(lambda mon: mon not in monitors, get_all_monitors()))
-
-            # Building the command to configure monitors
-            args = ['xrandr']
-            for disconnected in disconnecteds:
-                # Turn off disconnected monitors
-                args.extend(['--output', disconnected, '--off'])
-            if len(monitors) > 0:
-                profiles = [p for p in config['profiles'] if monitors == set(map(lambda m: m['output'], p))]
-
-                if len(profiles) > 0:
-                    # Select the first profile that matched
-                    profile = profiles[0]
-                    has_primary = False
-                    for monitor_config in profile:
-                        for prop in monitor_config:
-                            if prop == 'mode' and monitor_config[prop] == 'auto':
-                                args.append('--auto')
-                            else:
-                                args.append('--' + prop)
-                                if monitor_config[prop] is not None:
-                                    args.append(monitor_config[prop])
-                        if not has_primary:
-                            args.append('--primary')
-                            has_primary = True
+    with os.fdopen(pipe_fd) as pipe:
+        while True:
+            time.sleep(1)
+            monitors = get_monitors()
+            pipe_data = pipe.read().strip()
+            if monitors != old_monitors or pipe_data:
+                # At least one monitor was either connected or disconnected, or we want to change the configuration
+                if pipe_data == 'next':
+                    profile_index += 1
+                elif pipe_data == 'prev':
+                    profile_index -= 1
                 else:
-                    # Default configuration
-                    # Set the first monitor as primary
-                    has_primary = False
-                    for monitor in monitors:
-                        # Auto-config all the monitors
-                        args.extend(['--output', monitor, '--auto'])
-                        if not has_primary:
-                            args.append('--primary')
-                            has_primary = True
-            command = ' '.join(args)
-            subprocess.run(args)
-            old_monitors = monitors
+                    profile_index = 0
+
+                # Get the monitors that have been disconnected, if any
+                disconnecteds = list(filter(lambda mon: mon not in monitors, get_all_monitors()))
+
+                # Building the command to configure monitors
+                args = ['xrandr']
+                for disconnected in disconnecteds:
+                    # Turn off disconnected monitors
+                    args.extend(['--output', disconnected, '--off'])
+                if len(monitors) > 0:
+                    profiles = [p for p in config['profiles'] if monitors == set(map(lambda m: m['output'], p))]
+
+                    if len(profiles) > 0:
+                        # Select the first profile that matched
+                        profile_index %= len(profiles)
+                        profile = profiles[profile_index]
+                        has_primary = False
+                        for monitor_config in profile:
+                            for prop in monitor_config:
+                                if prop == 'mode' and monitor_config[prop] == 'auto':
+                                    args.append('--auto')
+                                else:
+                                    args.append('--' + prop)
+                                    if monitor_config[prop] is not None:
+                                        args.append(monitor_config[prop])
+                            if not has_primary:
+                                args.append('--primary')
+                                has_primary = True
+                    else:
+                        # Default configuration
+                        # Set the first monitor as primary
+                        has_primary = False
+                        for monitor in monitors:
+                            # Auto-config all the monitors
+                            args.extend(['--output', monitor, '--auto'])
+                            if not has_primary:
+                                args.append('--primary')
+                                has_primary = True
+                command = ' '.join(args)
+                subprocess.run(args)
+                old_monitors = monitors
 
 if __name__ == '__main__':
     main()
