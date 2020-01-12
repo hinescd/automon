@@ -8,7 +8,7 @@ Automon uses PyYAML to read configuration files.
 
 ## Configuration
 
-Automon uses the file ```~/.automon.yaml``` to decide how to configure monitors. The file declares which screen (if any) is the laptop screen, which file to read for lid status, and a collection of profiles for monitors. A profile is a list of configurations for monitors. Multiple profiless can be defined for a given set of monitors, and writing ```next``` or ```prev``` to the named pipe ```/tmp/automon_pipe``` will cause automon to change to the next or previous profile for the connected monitors. See the following for a sample configuration file:
+Automon uses the file ```~/.automon.yaml``` to decide how to configure monitors. The file declares which screen (if any) is the laptop screen, which file to read for lid status, and a collection of profiles for monitors. A profile is a list of configurations for monitors. Multiple profiless can be defined for a given set of monitors, and writing ```next``` or ```prev``` to the named pipe ```/tmp/automon_pipe``` will cause automon to change to the next or previous profile for the connected monitors. Similarly, if the index of a preferred profile is known, then sending ```set [index]``` to the pipe will switch directly to that profile. See the following for a sample configuration file:
 
 ```yaml
 --- 
@@ -35,7 +35,7 @@ profiles:
 
 This configuration has three defined profiles: two for when HDMI-1 and eDP-1 are connected, and one for when only eDP-1 is connected. If only HDMI-1 is connected, it will default to ```mode: auto```.
 
-In order for config changes to be reloaded, automon must be restarted.
+In order for config changes to be reloaded, write ```config``` to ```/tmp/automon_pipe```.
 
 ## Running
 

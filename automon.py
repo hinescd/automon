@@ -3,6 +3,19 @@ import os
 import time
 import yaml
 
+def load_config():
+    global config
+
+    # Load configuration from ~/.automon.yaml, if present
+    try:
+        with open(os.path.expanduser('~/.automon.yaml')) as f:
+            config = yaml.load(f, Loader=yaml.Loader)
+        if 'profiles' not in config:
+            config['profiles'] = []
+    except:
+        config = {'profiles': []}
+
+
 def xrandr():
     '''
     Capture output of 'xrandr -q' as an array of lines
@@ -34,17 +47,7 @@ def main():
     Repeatedly polls for a list of connected monitors, using xrandr to set connected monitors to
     auto and disconnected monitors to off
     '''
-    global config
-
-    # Load configuration from ~/.automon.yaml, if present
-    try:
-        with open(os.path.expanduser('~/.automon.yaml')) as f:
-            config = yaml.load(f, Loader=yaml.Loader)
-        if 'profiles' not in config:
-            config['profiles'] = []
-    except:
-        config = {'profiles': []}
-
+    load_config()
     if not os.path.exists('/tmp/automon_pipe'):
         os.mkfifo('/tmp/automon_pipe')
     pipe_fd = os.open('/tmp/automon_pipe', os.O_RDONLY | os.O_NONBLOCK)
@@ -56,13 +59,19 @@ def main():
         while True:
             time.sleep(1)
             monitors = get_monitors()
-            pipe_data = pipe.read().strip()
+            pipe_data = pipe.read().strip().split()
             if monitors != old_monitors or pipe_data:
                 # At least one monitor was either connected or disconnected, or we want to change the configuration
-                if pipe_data == 'next':
-                    profile_index += 1
-                elif pipe_data == 'prev':
-                    profile_index -= 1
+                if len(pipe_data):
+                    if pipe_data[0] == 'next':
+                        profile_index += 1
+                    elif pipe_data[0] == 'prev':
+                        profile_index -= 1
+                    elif pipe_data[0] == 'set':
+                        profile_index = int(pipe_data[1])
+                    elif pipe_data[0] == 'config':
+                        load_config()
+                        profile_index = 0
                 else:
                     profile_index = 0
 
